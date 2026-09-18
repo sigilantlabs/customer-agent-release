@@ -1,0 +1,150 @@
+name: Build and publish customer agent release
+
+# This is the publication path for the customer runtime. The image is built
+# and qualified on the target GPU first, then supplied here by immutable digest.
+# Rebuilding during publication would produce a different digest and invalidate
+# the qualification evidence.
+# No private key or registry credential is stored in this repository.
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: "Release identifier (for example 2026.09.10.1)"
+        required: true
+        type: string
+      image:
+        description: "Already-built and qualified immutable image (registry/repository@sha256:...)"
+        required: true
+        type: string
+      qualification:
+        description: "Committed qualification report for the exact image digest"
+        required: true
+        default: "docs/product/customer_runtime_gpu_validation.json"
+        type: string
+      hardware_profiles:
+        description: "Qualified profiles, comma separated as MODEL:COUNT"
+        required: true
+        default: "NVIDIA L4:1"
+        type: string
+      minimum_driver_version:
+        description: "Minimum driver covered by the qualification report"
+        required: true
+        default: "570.00"
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: customer-agent-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      CONTROL_URL: ${{ vars.SIGILANT_CONTROL_URL || 'https://app.sigilantlabs.com' }}
+      BASE_IMAGE: vllm/vllm-openai@sha256:fc56161ee42a011aeee78b65d0a81b6683c7d04402fd40503d14d4d6c98f07cb
+      VLLM_VERSION: "0.25.0"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Require release signing key
+        env:
+          RELEASE_KEY: ${{ secrets.SIGILANT_RELEASE_PRIVATE_KEY }}
+          KEY_ID: ${{ secrets.SIGILANT_RELEASE_KEY_ID }}
+        run: |
+          set -eu
+          test -n "$RELEASE_KEY" || { echo "SIGILANT_RELEASE_PRIVATE_KEY is required" >&2; exit 1; }
+          test -n "$KEY_ID" || { echo "SIGILANT_RELEASE_KEY_ID is required" >&2; exit 1; }
+
+      - name: Pull the qualified immutable image
+        id: image_ref
+        env:
+          IMAGE: ${{ inputs.image }}
+        run: |
+          set -eu
+          [[ "$IMAGE" =~ ^[A-Za-z0-9./_-]+@sha256:[0-9a-f]{64}$ ]] || { echo "image must be an immutable digest" >&2; exit 1; }
+          docker pull "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "image=$IMAGE" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prepare protected signing key
+        env:
+          RELEASE_KEY: ${{ secrets.SIGILANT_RELEASE_PRIVATE_KEY }}
+        run: |
+          set -eu
+          umask 077
+          printf '%s\n' "$RELEASE_KEY" > /tmp/sigilant-release.key
+          test "$(stat -c '%a' /tmp/sigilant-release.key)" = 600
+
+      - name: Build signed public release registry
+        env:
+          IMAGE: ${{ steps.image_ref.outputs.image }}
+          RELEASE_ID: ${{ inputs.release_id }}
+          QUALIFICATION: ${{ inputs.qualification }}
+          PROFILES: ${{ inputs.hardware_profiles }}
+          MIN_DRIVER: ${{ inputs.minimum_driver_version }}
+          KEY_ID: ${{ secrets.SIGILANT_RELEASE_KEY_ID }}
+        run: |
+          set -eu
+          args=()
+          IFS=',' read -ra profiles <<< "$PROFILES"
+          for profile in "${profiles[@]}"; do args+=(--hardware-profile "$profile"); done
+          python scripts/publish_customer_release.py \
+            --image "$IMAGE" --control-url "$CONTROL_URL" --release-id "$RELEASE_ID" \
+            --signing-key /tmp/sigilant-release.key --signing-key-id "$KEY_ID" \
+            --qualification "$QUALIFICATION" --output dist/customer-agent \
+            --minimum-driver-version "$MIN_DRIVER" \
+            --public-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/customer-agent-${RELEASE_ID}" \
+            "${args[@]}"
+
+      - name: Publish public GitHub Release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ inputs.release_id }}
+        run: |
+          set -eu
+          tag="customer-agent-${RELEASE_ID}"
+          gh release create "$tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Sigilant customer agent ${RELEASE_ID}" \
+            --notes-file dist/customer-agent/README.txt \
+            --latest
+          gh release upload "$tag" --repo "$GITHUB_REPOSITORY" \
+            dist/customer-agent/install \
+            dist/customer-agent/release.json \
+            dist/customer-agent/release.sig \
+            dist/customer-agent/README.txt
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/customer-agent-${RELEASE_ID}"
+          {
+            echo "### Customer agent release published"
+            echo
+            echo "Image: \`${{ steps.image_ref.outputs.image }}\`"
+            echo "Installer: ${base}/install"
+            echo "Manifest: ${base}/release.json"
+            echo "Signature: ${base}/release.sig"
+            echo
+            echo 'Customer command:'
+            echo '\`\`\`bash'
+            echo "curl -fsSL ${base}/install | bash -s -- --enrollment-code YOUR_CODE"
+            echo '\`\`\`'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove protected files
+        if: always()
+        run: rm -f /tmp/sigilant-release.key
