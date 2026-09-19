@@ -4,7 +4,10 @@ name: Build and publish customer agent release
 # and qualified on the target GPU first, then supplied here by immutable digest.
 # Rebuilding during publication would produce a different digest and invalidate
 # the qualification evidence.
-# No private key or registry credential is stored in this repository.
+# No private key or registry credential is stored in this repository. The
+# qualified customer-agent package must already be public: this workflow pulls
+# it without authenticating to GHCR, so a private-package configuration fails
+# closed instead of introducing a PAT or cross-repository package credential.
 on:
   workflow_dispatch:
     inputs:
@@ -34,7 +37,6 @@ on:
 
 permissions:
   contents: write
-  packages: write
 
 concurrency:
   group: customer-agent-release
@@ -49,19 +51,23 @@ jobs:
       VLLM_VERSION: "0.25.0"
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.12"
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Require a public distribution repository
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          visibility="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.visibility')"
+          test "$visibility" = public || {
+            echo "customer-agent-release must be public before publishing customer assets" >&2
+            exit 1
+          }
 
       - name: Require release signing key
         env:
@@ -78,7 +84,12 @@ jobs:
           IMAGE: ${{ inputs.image }}
         run: |
           set -eu
-          [[ "$IMAGE" =~ ^[A-Za-z0-9./_-]+@sha256:[0-9a-f]{64}$ ]] || { echo "image must be an immutable digest" >&2; exit 1; }
+          [[ "$IMAGE" =~ ^ghcr\.io/sigilantlabs/customer-agent@sha256:[0-9a-f]{64}$ ]] || {
+            echo "image must be the immutable Sigilant customer-agent GHCR digest" >&2
+            exit 1
+          }
+          # Deliberately unauthenticated. The customer installer must also be
+          # able to pull this exact digest without a registry credential.
           docker pull "$IMAGE"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "image=$IMAGE" >> "$GITHUB_STEP_SUMMARY"
@@ -124,8 +135,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --title "Sigilant customer agent ${RELEASE_ID}" \
             --notes-file dist/customer-agent/README.txt \
-            --latest
-          gh release upload "$tag" --repo "$GITHUB_REPOSITORY" \
+            --latest \
             dist/customer-agent/install \
             dist/customer-agent/release.json \
             dist/customer-agent/release.sig \
