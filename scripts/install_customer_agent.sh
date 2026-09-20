@@ -190,8 +190,14 @@ install_nvidia_runtime_if_missing() {
   command -v nvidia-smi >/dev/null 2>&1 || die "no NVIDIA GPU driver was detected; use a GPU machine and run this same command again"
   nvidia-smi --query-gpu=name --format=csv,noheader >/dev/null 2>&1 || die "the NVIDIA driver cannot access the GPU"
   if ! docker_cmd info --format '{{json .Runtimes}}' 2>/dev/null | grep -q 'nvidia'; then
-    info "installing NVIDIA container support automatically"
-    if command -v apt-get >/dev/null 2>&1; then
+    # Standard GPU cloud images often preinstall and apt-mark hold NVIDIA's
+    # container-toolkit packages.  Reinstalling a usable held toolkit makes
+    # apt fail with "held broken packages", so configure the installed binary
+    # directly and install packages only when it is genuinely absent/broken.
+    if command -v nvidia-ctk >/dev/null 2>&1 && nvidia-ctk --version >/dev/null 2>&1; then
+      info "configuring the installed NVIDIA container support"
+    elif command -v apt-get >/dev/null 2>&1; then
+      info "installing NVIDIA container support automatically"
       # Configure NVIDIA's signed package repository when the base cloud image
       # does not already provide it.  This is the documented repository, and
       # avoids asking the customer to run a second setup command.
@@ -212,11 +218,15 @@ install_nvidia_runtime_if_missing() {
       as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nvidia-container-toolkit ||
         die "NVIDIA container support could not be installed automatically on this image"
     elif command -v dnf >/dev/null 2>&1; then
+      info "installing NVIDIA container support automatically"
       as_root dnf install -y nvidia-container-toolkit || die "NVIDIA container support could not be installed automatically"
     else
       die "NVIDIA container support is missing; use a standard NVIDIA GPU image and run this same command again"
     fi
-    command -v nvidia-ctk >/dev/null 2>&1 && as_root nvidia-ctk runtime configure --runtime=docker
+    command -v nvidia-ctk >/dev/null 2>&1 && nvidia-ctk --version >/dev/null 2>&1 ||
+      die "NVIDIA container support is installed but nvidia-ctk is unavailable"
+    as_root nvidia-ctk runtime configure --runtime=docker ||
+      die "NVIDIA container support could not be configured for Docker"
     as_root systemctl restart docker || true
   fi
   docker_cmd run --rm --gpus all --entrypoint nvidia-smi nvidia/cuda:12.4.1-base-ubuntu22.04 \
