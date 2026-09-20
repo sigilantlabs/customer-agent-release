@@ -1,0 +1,73 @@
+name: Publish signed candidate acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_id:
+        description: "Nonproduction ID beginning with candidate-"
+        required: true
+        type: string
+      minimum_driver_version:
+        required: true
+        default: "580.178.04"
+        type: string
+
+permissions:
+  contents: write
+concurrency:
+  group: customer-agent-candidate-acceptance
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ghcr.io/sigilantlabs/customer-agent@sha256:bb12f3c4c4a84c23f8fb2e0b62defe01e77d12426fbc356a476f9a02c5d62027
+      CONTROL_URL: ${{ vars.SIGILANT_CONTROL_URL || 'https://app.sigilantlabs.com' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+      - name: Require a public distribution repository
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: test "$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.visibility')" = public
+      - name: Pull pinned candidate image without credentials
+        run: docker pull "$IMAGE"
+      - name: Create candidate-only ephemeral signing key
+        run: |
+          set -eu
+          umask 077
+          openssl genpkey -algorithm ED25519 -out /tmp/sigilant-candidate.key
+      - name: Build signed candidate assets
+        env:
+          KEY_ID: candidate-ephemeral-${{ github.run_id }}
+          CANDIDATE_ID: ${{ inputs.candidate_id }}
+          MIN_DRIVER: ${{ inputs.minimum_driver_version }}
+        run: |
+          set -eu
+          tag="customer-agent-${CANDIDATE_ID}"
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}"
+          python scripts/publish_candidate_acceptance.py \
+            --image "$IMAGE" --control-url "$CONTROL_URL" --candidate-id "$CANDIDATE_ID" \
+            --signing-key /tmp/sigilant-candidate.key --signing-key-id "$KEY_ID" \
+            --output dist/customer-agent-candidate \
+            --minimum-driver-version "$MIN_DRIVER" --public-base-url "$base"
+      - name: Publish nonproduction prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_ID: ${{ inputs.candidate_id }}
+        run: |
+          set -eu
+          gh release create "customer-agent-${CANDIDATE_ID}" \
+            --title "NONPRODUCTION Sigilant candidate ${CANDIDATE_ID}" \
+            --notes-file dist/customer-agent-candidate/README.txt \
+            --prerelease --latest=false \
+            dist/customer-agent-candidate/install \
+            dist/customer-agent-candidate/release.json \
+            dist/customer-agent-candidate/release.sig \
+            dist/customer-agent-candidate/README.txt
+      - name: Remove protected files
+        if: always()
+        run: rm -f /tmp/sigilant-candidate.key

@@ -6,6 +6,7 @@ import json
 import re
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -15,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/publish-customer-agent.yml"
 INSTALLER = ROOT / "scripts/install_customer_agent.sh"
 PUBLISHER = ROOT / "scripts/publish_customer_release.py"
+CANDIDATE_PUBLISHER = ROOT / "scripts/publish_candidate_acceptance.py"
 
 
 def load_publisher():
@@ -23,6 +25,18 @@ def load_publisher():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def load_candidate_publisher():
+    sys.path.insert(0, str(ROOT / "scripts"))
+    try:
+        spec = importlib.util.spec_from_file_location("publish_candidate_acceptance", CANDIDATE_PUBLISHER)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path.pop(0)
 
 
 class ReleaseRepositoryBoundaryTests(unittest.TestCase):
@@ -133,6 +147,56 @@ class ReleaseRepositoryBoundaryTests(unittest.TestCase):
                 capture_output=True,
             )
             self.assertEqual(verification.returncode, 0, verification.stderr.decode())
+
+    def test_production_assets_are_scope_bound(self) -> None:
+        publisher = load_publisher()
+        source = INSTALLER.read_text(encoding="utf-8")
+        self.assertIn('__SIGILANT_RELEASE_SCOPE__', source)
+        self.assertIn('"release_scope": "production"', PUBLISHER.read_text(encoding="utf-8"))
+        self.assertIn('release_scope', source)
+
+    def test_candidate_workflow_is_pinned_and_cannot_update_latest(self) -> None:
+        source = (ROOT / ".github/workflows/publish-candidate-acceptance.yml").read_text(encoding="utf-8")
+        self.assertIn("bb12f3c4c4a84c23f8fb2e0b62defe01e77d12426fbc356a476f9a02c5d62027", source)
+        self.assertIn("--prerelease --latest=false", source)
+        self.assertNotIn("qualification", source.lower())
+
+    def test_candidate_publisher_emits_signed_unqualified_candidate(self) -> None:
+        candidate = load_candidate_publisher()
+        image = "ghcr.io/sigilantlabs/customer-agent@sha256:" + "b" * 64
+        with tempfile.TemporaryDirectory() as raw_temp:
+            temp = Path(raw_temp)
+            key = temp / "release.key"
+            subprocess.run(["openssl", "genpkey", "-algorithm", "ED25519", "-out", str(key)],
+                           check=True, capture_output=True)
+            key.chmod(0o600)
+            metadata = {"Os": "linux", "Architecture": "amd64",
+                        "Config": {"Labels": {"io.sigilant.vllm.version": "0.25.0"}}}
+            with mock.patch.object(candidate, "_image_metadata", return_value=metadata):
+                output = candidate.publish_candidate(
+                    image=image, control_url="https://app.sigilantlabs.com",
+                    candidate_id="candidate-2026.09.20.1", signing_key=key,
+                    signing_key_id="candidate-ephemeral-1", output=temp / "dist",
+                    minimum_driver_version="580.178.04",
+                    public_base_url="https://github.com/sigilantlabs/customer-agent-release/releases/download/customer-agent-candidate-2026.09.20.1")
+            document = json.loads((output / "release.json").read_text(encoding="utf-8"))
+            self.assertEqual(document["schema"], "sigilant.customer-agent-candidate.v1")
+            self.assertEqual(document["candidate_state"], "awaiting-acceptance")
+            self.assertNotIn("qualification", document)
+            installer = (output / "install").read_text(encoding="utf-8")
+            self.assertIn('EXPECTED_RELEASE_SCHEMA="sigilant.customer-agent-candidate.v1"', installer)
+            self.assertIn('DEFAULT_CONTROL_URL=https://app.sigilantlabs.com', installer)
+            self.assertNotIn("__SIGILANT_RELEASE_SCHEMA__", installer)
+            public_key = subprocess.run(["openssl", "pkey", "-in", str(key), "-pubout"],
+                                        check=True, capture_output=True, text=True).stdout
+            public_path = temp / "public.pem"
+            public_path.write_text(public_key, encoding="utf-8")
+            verify = ["openssl", "pkeyutl", "-verify", "-pubin", "-inkey", str(public_path),
+                      "-rawin", "-in", str(output / "release.json"),
+                      "-sigfile", str(output / "release.sig")]
+            self.assertEqual(subprocess.run(verify, capture_output=True).returncode, 0)
+            (output / "release.json").write_text("{}\n", encoding="utf-8")
+            self.assertNotEqual(subprocess.run(verify, capture_output=True).returncode, 0)
 
 
 if __name__ == "__main__":

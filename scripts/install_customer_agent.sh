@@ -11,6 +11,8 @@ set -euo pipefail
 readonly INSTALLER_VERSION="1"
 readonly DEFAULT_CONTROL_URL="https://optimizer-api-production.up.railway.app"
 readonly DEFAULT_RELEASE_URL="https://github.com/sigilantlabs/customer-agent-release/releases/latest/download/release.json"
+readonly EXPECTED_RELEASE_SCOPE="__SIGILANT_RELEASE_SCOPE__"
+readonly EXPECTED_RELEASE_SCHEMA="__SIGILANT_RELEASE_SCHEMA__"
 readonly DEFAULT_IMAGE="ghcr.io/sigilantlabs/customer-agent:stable"
 readonly DEFAULT_STATE_DIR="${SIGILANT_STATE_DIR:-${HOME:-/var/lib}/.local/share/sigilant-customer}"
 # This marker is replaced in the public installer with the base64 encoded
@@ -257,7 +259,10 @@ fetch_and_verify_release() {
     die "the Sigilant release signature is invalid; no image was pulled"
   local schema
   schema="$(json_value schema "$manifest")" || die "the signed release manifest is invalid"
-  [[ "$schema" == "sigilant.customer-agent-release.v1" ]] || die "the signed release schema is unsupported"
+  [[ "$schema" == "$EXPECTED_RELEASE_SCHEMA" ]] || die "the signed release schema is unsupported"
+  local release_scope
+  release_scope="$(json_value release_scope "$manifest")" || die "the signed release manifest is invalid"
+  [[ "$release_scope" == "$EXPECTED_RELEASE_SCOPE" ]] || die "the signed release scope is not valid for this installer"
   RELEASE_ID="$(json_value release_id "$manifest")" || die "the signed release manifest is invalid"
   [[ "$RELEASE_ID" =~ ^[A-Za-z0-9._-]{1,64}$ ]] || die "the signed release identifier is invalid"
   IMAGE="$(json_value image "$manifest")" || die "the signed release has no image"

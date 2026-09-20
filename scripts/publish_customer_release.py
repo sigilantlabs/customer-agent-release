@@ -21,6 +21,7 @@ import base64
 import json
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 from urllib.parse import urlsplit
@@ -127,13 +128,22 @@ def _qualification(record_path: Path, image: str, profiles: list[dict], minimum_
     return record
 
 
-def render_installer(destination: Path, public_key: str, manifest_url: str) -> None:
+def render_installer(destination: Path, public_key: str, manifest_url: str,
+                     release_scope: str = "production",
+                     release_schema: str = "sigilant.customer-agent-release.v1",
+                     control_url: str = "https://optimizer-api-production.up.railway.app") -> None:
     source = Path(__file__).with_name("install_customer_agent.sh").read_text(encoding="utf-8")
     encoded = base64.b64encode(public_key.encode()).decode("ascii")
     rendered = source.replace("__SIGILANT_RELEASE_PUBLIC_KEY_B64__", encoded)
     rendered = rendered.replace(
         "https://github.com/sigilantlabs/customer-agent-release/releases/latest/download/release.json",
         manifest_url,
+    )
+    rendered = rendered.replace("__SIGILANT_RELEASE_SCOPE__", release_scope)
+    rendered = rendered.replace("__SIGILANT_RELEASE_SCHEMA__", release_schema)
+    rendered = rendered.replace(
+        'readonly DEFAULT_CONTROL_URL="https://optimizer-api-production.up.railway.app"',
+        f"readonly DEFAULT_CONTROL_URL={shlex.quote(control_url.rstrip('/'))}",
     )
     if "__SIGILANT_RELEASE_PUBLIC_KEY_B64__" in rendered:
         raise ValueError("installer signing placeholder was not replaced")
@@ -169,6 +179,7 @@ def publish(*, image: str, control_url: str, release_id: str, signing_key: Path,
     try:
         manifest = {
             "schema": "sigilant.customer-agent-release.v1",
+            "release_scope": "production",
             "release_id": release_id,
             "signer_key_id": signing_key_id,
             "image": image,
@@ -184,7 +195,8 @@ def publish(*, image: str, control_url: str, release_id: str, signing_key: Path,
         manifest_path.write_bytes(canonical_json(manifest))
         _run(["openssl", "pkeyutl", "-sign", "-inkey", str(signing_key), "-rawin",
               "-in", str(manifest_path), "-out", str(output / "release.sig")])
-        render_installer(output / "install", public, public_urls["manifest"])
+        render_installer(output / "install", public, public_urls["manifest"], "production",
+                         control_url=control_url)
         (output / "README.txt").write_text(
             "Sigilant customer agent release " + release_id + "\n\n"
             "Serve install, release.json, and release.sig from the configured HTTPS origin.\n"

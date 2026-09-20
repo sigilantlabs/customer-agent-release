@@ -8,3 +8,7 @@ workflow and passes every required release check.
 Qualification reports contain operational evidence only. Do not store customer
 prompts, model responses, private evaluation examples, credentials, host
 tokens, signing keys, or proprietary model-selection policy here.
+
+Candidate prereleases carry no qualification claims. Acceptance observations
+must be recorded separately after the signed candidate is exercised. They
+cannot satisfy the production qualification gate.
