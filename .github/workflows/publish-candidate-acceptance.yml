@@ -22,7 +22,7 @@ jobs:
   candidate:
     runs-on: ubuntu-latest
     env:
-      IMAGE: ghcr.io/sigilantlabs/customer-agent@sha256:bb12f3c4c4a84c23f8fb2e0b62defe01e77d12426fbc356a476f9a02c5d62027
+      IMAGE: ghcr.io/sigilantlabs/customer-agent@sha256:78fbbceca60406d5317831330ebc4c7fc362fead7d10e0208b0f179955f9c854
       CONTROL_URL: ${{ vars.SIGILANT_CONTROL_URL || 'https://app.sigilantlabs.com' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

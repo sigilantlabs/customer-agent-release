@@ -157,7 +157,7 @@ class ReleaseRepositoryBoundaryTests(unittest.TestCase):
 
     def test_candidate_workflow_is_pinned_and_cannot_update_latest(self) -> None:
         source = (ROOT / ".github/workflows/publish-candidate-acceptance.yml").read_text(encoding="utf-8")
-        self.assertIn("bb12f3c4c4a84c23f8fb2e0b62defe01e77d12426fbc356a476f9a02c5d62027", source)
+        self.assertIn("78fbbceca60406d5317831330ebc4c7fc362fead7d10e0208b0f179955f9c854", source)
         self.assertIn("--prerelease --latest=false", source)
         self.assertNotIn("qualification", source.lower())
 
