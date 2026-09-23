@@ -132,7 +132,6 @@ jobs:
           set -eu
           tag="customer-agent-${RELEASE_ID}"
           gh release create "$tag" \
-            --repo "$GITHUB_REPOSITORY" \
             --title "Sigilant customer agent ${RELEASE_ID}" \
             --notes-file dist/customer-agent/README.txt \
             --latest \
@@ -140,6 +139,10 @@ jobs:
             dist/customer-agent/release.json \
             dist/customer-agent/release.sig \
             dist/customer-agent/README.txt
+          test "$(gh release view "$tag" --json assets --jq '.assets | length')" = "4" || {
+            echo "release was created without exactly four assets" >&2
+            exit 1
+          }
           base="https://github.com/${GITHUB_REPOSITORY}/releases/download/customer-agent-${RELEASE_ID}"
           {
             echo "### Customer agent release published"
