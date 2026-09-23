@@ -1,0 +1,25 @@
+{
+  "schema": "sigilant.customer-agent-qualification.v1",
+  "image": "ghcr.io/sigilantlabs/customer-agent@sha256:6d7bed073019c2106497a113922906183d096576ea3e1168a4017406c00448c6",
+  "profiles": [
+    {"model": "NVIDIA L4", "count": 1}
+  ],
+  "minimum_driver_version": "570.00",
+  "test_run_id": "gcp-run-588-marker-canary",
+  "real_model_inference": true,
+  "account_job_receipt_roundtrip": true,
+  "cancel_stops_gpu_processes": true,
+  "egress_review": true,
+  "private_assets_absent": true,
+  "final_recommendation_verified": true,
+  "evidence": {
+    "run_id": 588,
+    "evidence_commit": "c63bb75",
+    "marker_scan_commit": "7661d49",
+    "privacy_gate_review": "Astra approved",
+    "rows": 60,
+    "inference_success": 60,
+    "inference_errors": 0,
+    "managed_modal_legs": 0
+  }
+}
