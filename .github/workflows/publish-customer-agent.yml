@@ -134,8 +134,10 @@ jobs:
           gh release create "$tag" \
             --title "Sigilant customer agent ${RELEASE_ID}" \
             --notes-file dist/customer-agent/README.txt \
-            --latest
+            --prerelease \
+            --latest=false
           gh release upload "$tag" \
+            --repo "$GITHUB_REPOSITORY" \
             dist/customer-agent/install \
             dist/customer-agent/release.json \
             dist/customer-agent/release.sig \
@@ -145,6 +147,7 @@ jobs:
             echo "release was created without exactly four assets" >&2
             exit 1
           }
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --prerelease=false --latest
           base="https://github.com/${GITHUB_REPOSITORY}/releases/download/customer-agent-${RELEASE_ID}"
           {
             echo "### Customer agent release published"
