@@ -1,0 +1,27 @@
+{
+  "schema": "sigilant.customer-agent-qualification.v1",
+  "image": "ghcr.io/sigilantlabs/customer-agent@sha256:bb12f3c4c4a84c23f8fb2e0b62defe01e77d12426fbc356a476f9a02c5d62027",
+  "profiles": [{"model": "NVIDIA L4", "count": 1}],
+  "minimum_driver_version": "570.00",
+  "test_run_id": "gcp-run-578-exact-ci-digest",
+  "real_model_inference": true,
+  "account_job_receipt_roundtrip": true,
+  "cancel_stops_gpu_processes": true,
+  "egress_review": true,
+  "private_assets_absent": true,
+  "final_recommendation_verified": true,
+  "evidence": {
+    "run_id": 578,
+    "source_image_digest": "sha256:bb12f3c4c4a84c23f8fb2e0b62defe01e77d12426fbc356a476f9a02c5d62027",
+    "source_identity": "sha256:5821396b68303e3f305d75006967f089ca79ba2f72f8f28614e321d86b9753d2",
+    "runtime": "Qwen2.5-7B-Instruct dae5e0d2d3cc641da65943fa6ef02e5e02fd4d64, vLLM 0.25.0",
+    "rows": 60,
+    "inference_success": 60,
+    "inference_errors": 0,
+    "missing_results": 0,
+    "managed_modal_legs": 0,
+    "receipt_hmac_verified": true,
+    "privacy_markers_found": 0,
+    "evidence_commit": "7a6a6cc"
+  }
+}
