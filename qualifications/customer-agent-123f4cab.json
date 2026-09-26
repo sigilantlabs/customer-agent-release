@@ -1,0 +1,30 @@
+{
+  "schema": "sigilant.customer-agent-qualification.v1",
+  "image": "ghcr.io/sigilantlabs/customer-agent@sha256:123f4cab05568a361402a7ef41d38162601cd845d83d5fbafb0e805e2c0a940c",
+  "profiles": [{"model": "NVIDIA L4", "count": 1}],
+  "minimum_driver_version": "570.00",
+  "test_run_id": "gcp-run-607-609-610",
+  "real_model_inference": true,
+  "account_job_receipt_roundtrip": true,
+  "cancel_stops_gpu_processes": true,
+  "egress_review": true,
+  "private_assets_absent": true,
+  "final_recommendation_verified": true,
+  "evidence": {
+    "qualification_run_id": 607,
+    "qualification_image_digest": "sha256:123f4cab05568a361402a7ef41d38162601cd845d83d5fbafb0e805e2c0a940c",
+    "qualification_rows": 40,
+    "candidate_count": 2,
+    "successful_inference_requests": 97,
+    "inference_errors": 0,
+    "winner": "Qwen2.5-7B-Instruct",
+    "winner_revision": "dae5e0d2d3cc641da65943fa6ef02e5e02fd4d64",
+    "gcp_customer_host_cancel_run_id": 609,
+    "managed_comparative_cancel_run_id": 610,
+    "gcp_processes_remaining_after_cancel": 0,
+    "modal_active_tasks_after_cancel": 0,
+    "fixture_cap": 40,
+    "bounded_profile": "bounded_customer_prove_v1 / bounded_comparative_prove_v1",
+    "evidence_commits": ["ae2f1b0", "036ca49", "78c3014", "13101c0"]
+  }
+}
