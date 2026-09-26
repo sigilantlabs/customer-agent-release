@@ -29,6 +29,8 @@ DRY_RUN=0
 NO_SYSTEMD=0
 WORKLOAD_PATH=""
 PROVE_CREDENTIAL="${SIGILANT_LAUNCH_CREDENTIAL:-}"
+RUN_PURPOSE="production"
+SAMPLE_CAP=""
 # Containers use the invoking account's numeric identity.  This lets a
 # cap-drop=ALL process access the private 0700 state directory without running
 # as root or retaining setuid/setgid capabilities.  Honor sudo's caller fields
@@ -79,6 +81,8 @@ Options:
   --state-dir PATH        durable local state (default: ~/.local/share/sigilant-customer)
   --workload FILE         install the agent and immediately run Prove on this workload
   --credential VALUE      temporary API credential for Prove (Task 5 will replace this bridge)
+  --run-purpose VALUE     Prove execution profile (for bounded acceptance tests)
+  --sample-cap N          bounded Prove row cap (40 to 60)
   --no-systemd            run with Docker restart policy only
   --dry-run               show checks and actions without changing the host
   --help                  show this help
@@ -105,6 +109,12 @@ while [[ $# -gt 0 ]]; do
     --credential)
       [[ $# -ge 2 && -n "$2" ]] || die "--credential needs a value"
       PROVE_CREDENTIAL="$2"; shift 2 ;;
+    --run-purpose)
+      [[ $# -ge 2 && -n "$2" ]] || die "--run-purpose needs a value"
+      RUN_PURPOSE="$2"; shift 2 ;;
+    --sample-cap)
+      [[ $# -ge 2 && "$2" =~ ^[0-9]+$ ]] || die "--sample-cap needs an integer"
+      SAMPLE_CAP="$2"; shift 2 ;;
     --no-systemd) NO_SYSTEMD=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --help|-h) usage; exit 0 ;;
@@ -481,6 +491,7 @@ run_prove_if_requested() {
     --mount "type=bind,src=$workload,dst=$mounted_workload,readonly" \
     --entrypoint sigilant-connected-prove "$IMAGE" \
     --workload "$mounted_workload" --credential-stdin --host-record /state/host.json \
+    --run-purpose "$RUN_PURPOSE" ${SAMPLE_CAP:+--sample-cap "$SAMPLE_CAP"} \
     --output "/state/${result##*/}" --submission-state "/state/${submission##*/}"
   prove_status="${PIPESTATUS[1]}"
   set -e
