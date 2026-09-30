@@ -184,6 +184,19 @@ class ReleaseRepositoryBoundaryTests(unittest.TestCase):
             self.assertEqual(timeout.returncode, 2, timeout.stderr)
             self.assertIn("no Prove run was submitted", timeout.stderr)
 
+    def test_installer_reports_host_package_failures(self) -> None:
+        source = INSTALLER.read_text(encoding="utf-8")
+        for message in (
+            "Docker package index refresh failed",
+            "Docker could not be installed automatically",
+            "NVIDIA repository verification tools could not be installed",
+            "NVIDIA package index refresh failed",
+            "NVIDIA container support could not be installed automatically",
+        ):
+            self.assertIn(message, source)
+        checked = subprocess.run(["bash", "-n", str(INSTALLER)], capture_output=True, text=True)
+        self.assertEqual(checked.returncode, 0, checked.stderr)
+
     def test_candidate_workflow_is_pinned_and_cannot_update_latest(self) -> None:
         source = (ROOT / ".github/workflows/publish-candidate-acceptance.yml").read_text(encoding="utf-8")
         self.assertIn("5765d8b6f61e797f1fc52797d0eac8ced317d0b878ea5310c61e40f0f8a622c2", source)

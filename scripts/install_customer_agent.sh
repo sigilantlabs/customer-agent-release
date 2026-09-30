@@ -166,14 +166,15 @@ install_docker_if_missing() {
   if ! command -v docker >/dev/null 2>&1; then
     info "installing Docker automatically"
     if command -v apt-get >/dev/null 2>&1; then
-      as_root apt-get update -qq
-      as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io
+      as_root apt-get update -qq || die "Docker package index refresh failed"
+      as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io ||
+        die "Docker could not be installed automatically"
       as_root systemctl enable --now docker || true
     elif command -v dnf >/dev/null 2>&1; then
-      as_root dnf install -y docker
+      as_root dnf install -y docker || die "Docker could not be installed automatically"
       as_root systemctl enable --now docker || true
     elif command -v yum >/dev/null 2>&1; then
-      as_root yum install -y docker
+      as_root yum install -y docker || die "Docker could not be installed automatically"
       as_root systemctl enable --now docker || true
     else
       die "Docker is not installed and this Linux distribution has no supported package manager"
@@ -213,7 +214,9 @@ install_nvidia_runtime_if_missing() {
       # does not already provide it.  This is the documented repository, and
       # avoids asking the customer to run a second setup command.
       if ! apt-cache show nvidia-container-toolkit >/dev/null 2>&1; then
-        command -v gpg >/dev/null 2>&1 || as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq gnupg ca-certificates
+        command -v gpg >/dev/null 2>&1 ||
+          as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq gnupg ca-certificates ||
+          die "NVIDIA repository verification tools could not be installed"
         local keyring="/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"
         local listfile="/etc/apt/sources.list.d/nvidia-container-toolkit.list"
         curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
@@ -225,7 +228,7 @@ install_nvidia_runtime_if_missing() {
           as_root tee "$listfile" >/dev/null ||
           die "could not configure NVIDIA's package repository"
       fi
-      as_root apt-get update -qq
+      as_root apt-get update -qq || die "NVIDIA package index refresh failed"
       as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nvidia-container-toolkit ||
         die "NVIDIA container support could not be installed automatically on this image"
     elif command -v dnf >/dev/null 2>&1; then
