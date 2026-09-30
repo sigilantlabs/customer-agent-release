@@ -1,0 +1,98 @@
+{
+  "account_job_receipt_roundtrip": true,
+  "cancel_stops_gpu_processes": true,
+  "capacity_load": true,
+  "egress_review": true,
+  "evidence": {
+    "bounded_gcp_assessment": {
+      "artifact_correlation_ok": true,
+      "elapsed_wall_seconds": 123.743,
+      "gpu_qualified": true,
+      "manifest": {
+        "expected_receipt_ids_sha256": "8179e8fb019a8dc471201eeb6cc4868c0c47a35a016dc436d0248961bf36b994",
+        "selected_row_count": 50,
+        "selected_rows_sha256": "98d9be50876f8a046116d750ac71c11e482b214527e2b5a792dc1ab0be233a0a",
+        "source_fixture_sha256": "6b08e7f63e1911afb1b06304e27e0999c688a719f7d36a9ade00232754c6a186",
+        "source_row_count": 50,
+        "tool_smoke_count": 2
+      },
+      "qualification_checks": {
+        "boot_probe": {
+          "ok": true,
+          "reason": "pinned vLLM server is healthy"
+        },
+        "customer_rows": {
+          "all_executed": true,
+          "count": 50,
+          "execution_error_count": 0,
+          "expected_count": 50,
+          "expected_ids_match": true,
+          "expected_ids_sha256": "8179e8fb019a8dc471201eeb6cc4868c0c47a35a016dc436d0248961bf36b994",
+          "receipt_ids_sha256": "8179e8fb019a8dc471201eeb6cc4868c0c47a35a016dc436d0248961bf36b994",
+          "unique_count": 50
+        },
+        "load_probe": {
+          "incomplete": false,
+          "measurement": {
+            "achieved_concurrency": 1.94,
+            "cached_prefix_tokens": 0,
+            "completion_tokens": 32,
+            "concurrency": 2,
+            "error_count": 0,
+            "errors": [],
+            "fits": true,
+            "n_requests": 2,
+            "new_turn_tokens": 32,
+            "prompt_tokens": 122,
+            "prompt_tokens_total": 122,
+            "requested": 2,
+            "rounds": 1,
+            "saturated": true,
+            "tokens_generated": 32,
+            "ttft_p50_ms": 90.1,
+            "ttft_p95_ms": 114.8,
+            "wall_s": 0.633,
+            "wall_time_s": 0.633
+          },
+          "ok": true,
+          "reason": null
+        }
+      },
+      "qualification_failures": [],
+      "reviewed_capacity_load_ok": true,
+      "runtime_sha256": "7b3bd05c8823da2b2ae3c2c5af5f7bbb2f3ccc980260f5a9863e8d6764f79208",
+      "schema": "sigilant.customer-gcp-qualification-assessment.v1",
+      "serve_plan_sha256": "6be307b405e95c325aa9728d330f356e8a5d53549d34a9839cffb506daa8909c",
+      "tool_smoke_checks": [
+        {
+          "name": "sql",
+          "ok": true
+        },
+        {
+          "name": "multi_tool",
+          "ok": true
+        }
+      ]
+    },
+    "capacity_load": true,
+    "inference_errors": 0,
+    "inference_rows": 50,
+    "source_revision": "d4cfabf"
+  },
+  "final_recommendation_verified": true,
+  "image": "ghcr.io/sigilantlabs/customer-agent@sha256:351e9869c17790418f66116bbb2c675b07dbd6170bb7f5f0875e6fa7d2ef5605",
+  "inference_errors": 0,
+  "inference_rows": 50,
+  "minimum_driver_version": "570.00",
+  "private_assets_absent": true,
+  "profiles": [
+    {
+      "count": 1,
+      "model": "NVIDIA L4"
+    }
+  ],
+  "real_model_inference": true,
+  "schema": "sigilant.customer-agent-qualification.v1",
+  "source_revision": "d4cfabf",
+  "test_run_id": "gcp-task1-20260930-readiness-50"
+}
