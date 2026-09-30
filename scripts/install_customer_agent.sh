@@ -15,6 +15,7 @@ readonly EXPECTED_RELEASE_SCOPE="__SIGILANT_RELEASE_SCOPE__"
 readonly EXPECTED_RELEASE_SCHEMA="__SIGILANT_RELEASE_SCHEMA__"
 readonly DEFAULT_IMAGE="ghcr.io/sigilantlabs/customer-agent:stable"
 readonly DEFAULT_STATE_DIR="${SIGILANT_STATE_DIR:-${HOME:-/var/lib}/.local/share/sigilant-customer}"
+readonly AGENT_READY_TIMEOUT_SECONDS="${SIGILANT_AGENT_READY_TIMEOUT_SECONDS:-90}"
 # This marker is replaced in the public installer with the base64 encoded
 # release signing key. It is intentionally not environment-overridable: the
 # installer is the trust root and accepting a customer-provided key would
@@ -379,6 +380,8 @@ install_and_start() {
     die "the existing Sigilant agent is $existing_status; it was left untouched because active work cannot be ruled out"
   fi
   docker_cmd rm -f "$service_name" >/dev/null 2>&1 || true
+  # A marker from a previous process must not authorize a fresh Prove run.
+  rm -f -- "$STATE_DIR/agent-ready.json"
   local -a enrollment_args=()
   if [[ ! -s "$STATE_DIR/host-token" && ! -s "$STATE_DIR/host.json" ]]; then
     enrollment_args+=(--env "SIGILANT_ENROLLMENT_CODE=$ENROLLMENT_CODE")
@@ -414,6 +417,7 @@ install_and_start() {
   }
   if [[ -n "${enrollment_args[*]}" ]]; then
     docker_cmd rm -f "$service_name" >/dev/null || true
+    rm -f -- "$STATE_DIR/agent-ready.json"
     docker_cmd run -d --name "$service_name" --restart unless-stopped --init --gpus all \
       --user "$INSTALL_UID:$INSTALL_GID" --cap-drop=ALL --security-opt=no-new-privileges --read-only \
       --tmpfs /tmp:rw,nosuid,nodev,mode=1777,size=2g \
@@ -458,6 +462,32 @@ EOF
   info "agent is enrolled and running"
 }
 
+wait_for_agent_ready() {
+  [[ "$AGENT_READY_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] &&
+    (( AGENT_READY_TIMEOUT_SECONDS >= 1 && AGENT_READY_TIMEOUT_SECONDS <= 180 )) ||
+    die "the agent readiness timeout must be between 1 and 180 seconds"
+  local deadline=$(( $(date +%s) + AGENT_READY_TIMEOUT_SECONDS ))
+  local marker="$STATE_DIR/agent-ready.json" status now polled_at
+  info "waiting for the enrolled agent to complete its first job poll"
+  while :; do
+    status="$(docker_cmd inspect --format '{{.State.Status}}' sigilant-customer-agent 2>/dev/null || true)"
+    [[ "$status" == "running" ]] ||
+      die "the enrolled agent stopped before it could poll for work; no Prove run was submitted"
+    if [[ -s "$marker" ]]; then
+      polled_at="$(stat -c %Y "$marker" 2>/dev/null || stat -f %m "$marker" 2>/dev/null || true)"
+      now="$(date +%s)"
+      if [[ "$polled_at" =~ ^[0-9]+$ ]] &&
+         (( now >= polled_at && now - polled_at <= 30 )); then
+        info "the enrolled agent is ready to receive Prove work"
+        return 0
+      fi
+    fi
+    (( $(date +%s) < deadline )) ||
+      die "the enrolled agent did not complete a job poll within ${AGENT_READY_TIMEOUT_SECONDS} seconds; no Prove run was submitted"
+    sleep 2
+  done
+}
+
 run_prove_if_requested() {
   [[ -n "$WORKLOAD_PATH" ]] || return 0
   command -v readlink >/dev/null 2>&1 || die "readlink is required to locate the workload file"
@@ -480,6 +510,7 @@ run_prove_if_requested() {
   [[ "$digest" =~ ^[a-f0-9]{64}$ ]] || die "the workload digest could not be determined"
   result="$STATE_DIR/prove-${digest:0:16}-result.json"
   submission="$STATE_DIR/prove-${digest:0:16}-submission.json"
+  wait_for_agent_ready
   info "starting Prove on this machine's enrolled GPU"
   set +e
   printf '%s' "$PROVE_CREDENTIAL" | docker_cmd run --rm -i --init \

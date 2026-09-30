@@ -155,6 +155,35 @@ class ReleaseRepositoryBoundaryTests(unittest.TestCase):
         self.assertIn('"release_scope": "production"', PUBLISHER.read_text(encoding="utf-8"))
         self.assertIn('release_scope', source)
 
+    def test_installer_waits_for_successful_agent_poll_before_prove(self) -> None:
+        source = INSTALLER.read_text(encoding="utf-8")
+        self.assertIn('rm -f -- "$STATE_DIR/agent-ready.json"', source)
+        function = source.split("wait_for_agent_ready() {", 1)[1].split(
+            "\nrun_prove_if_requested() {", 1)[0]
+        prove = source.split("run_prove_if_requested() {", 1)[1]
+        self.assertLess(prove.index("wait_for_agent_ready"),
+                        prove.index('info "starting Prove'))
+
+        with tempfile.TemporaryDirectory() as raw_temp:
+            state = Path(raw_temp)
+            marker = state / "agent-ready.json"
+            marker.write_text('{"agent_protocol":"prove-leg-v2"}', encoding="utf-8")
+            script = (
+                'set -eu\n'
+                f'STATE_DIR={str(state)!r}\n'
+                'AGENT_READY_TIMEOUT_SECONDS=1\n'
+                'die() { printf "%s\\n" "$*" >&2; exit 2; }\n'
+                'info() { :; }\n'
+                'docker_cmd() { printf "running\\n"; }\n'
+                'wait_for_agent_ready() {' + function + '\nwait_for_agent_ready\n'
+            )
+            ready = subprocess.run(["bash", "-c", script], text=True, capture_output=True)
+            self.assertEqual(ready.returncode, 0, ready.stderr)
+            marker.unlink()
+            timeout = subprocess.run(["bash", "-c", script], text=True, capture_output=True)
+            self.assertEqual(timeout.returncode, 2, timeout.stderr)
+            self.assertIn("no Prove run was submitted", timeout.stderr)
+
     def test_candidate_workflow_is_pinned_and_cannot_update_latest(self) -> None:
         source = (ROOT / ".github/workflows/publish-candidate-acceptance.yml").read_text(encoding="utf-8")
         self.assertIn("5765d8b6f61e797f1fc52797d0eac8ced317d0b878ea5310c61e40f0f8a622c2", source)
