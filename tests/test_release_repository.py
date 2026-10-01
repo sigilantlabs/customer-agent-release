@@ -40,6 +40,26 @@ def load_candidate_publisher():
 
 
 class ReleaseRepositoryBoundaryTests(unittest.TestCase):
+    def test_publish_checks_exact_uploaded_asset_names_before_release_is_latest(self) -> None:
+        source = WORKFLOW.read_text(encoding="utf-8")
+        self.assertLess(source.index("gh release upload"),
+                        source.index("python scripts/verify_customer_release_assets.py"))
+        self.assertLess(source.index("python scripts/verify_customer_release_assets.py"),
+                        source.index('gh release edit "$tag"'))
+
+    def test_asset_verifier_fails_on_missing_asset(self) -> None:
+        path = ROOT / "scripts" / "verify_customer_release_assets.py"
+        spec = importlib.util.spec_from_file_location("verify_customer_release_assets", path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        missing = subprocess.CompletedProcess([], 0, "install\nREADME.txt\nrelease.json\n", "")
+        complete = subprocess.CompletedProcess([], 0, "install\nREADME.txt\nrelease.json\nrelease.sig\n", "")
+        with mock.patch.object(module.subprocess, "run", return_value=missing):
+            self.assertFalse(module.verify("sigilantlabs/customer-agent-release", "test", attempts=1))
+        with mock.patch.object(module.subprocess, "run", return_value=complete):
+            self.assertTrue(module.verify("sigilantlabs/customer-agent-release", "test", attempts=1))
+
     def test_workflow_has_no_pat_or_registry_secret_dependency(self) -> None:
         source = WORKFLOW.read_text(encoding="utf-8")
         self.assertNotIn("docker/login-action", source)

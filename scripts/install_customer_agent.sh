@@ -32,6 +32,13 @@ WORKLOAD_PATH=""
 PROVE_CREDENTIAL="${SIGILANT_LAUNCH_CREDENTIAL:-}"
 RUN_PURPOSE="production"
 SAMPLE_CAP=""
+RELEASE_TMP_DIR=""
+cleanup_installer_temp() {
+  [[ -z "$RELEASE_TMP_DIR" ]] || rm -rf -- "$RELEASE_TMP_DIR"
+}
+trap cleanup_installer_temp EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 # Containers use the invoking account's numeric identity.  This lets a
 # cap-drop=ALL process access the private 0700 state directory without running
 # as root or retaining setuid/setgid capabilities.  Honor sudo's caller fields
@@ -270,10 +277,8 @@ fetch_and_verify_release() {
   [[ "$RELEASE_KEY_B64" != *SIGILANT_RELEASE* ]] || die "this installer is not an official signed release"
   local dir manifest signature key verify
   dir="$(mktemp -d)"
-  # `dir` is local to this function; an EXIT trap that expands it after the
-  # function returns trips `set -u`. Keep cleanup state global and defensive.
+  # Keep cleanup state global so interrupted downloads are removed on exit.
   RELEASE_TMP_DIR="$dir"
-  trap 'if [[ -n "${RELEASE_TMP_DIR:-}" ]]; then rm -rf "$RELEASE_TMP_DIR"; fi' EXIT
   manifest="$dir/release.json"; signature="$dir/release.sig"; key="$dir/release-key.pem"
   curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 "$RELEASE_URL" -o "$manifest" || die "could not download the Sigilant release"
   local signature_url="${RELEASE_URL%.json}.sig"
@@ -495,6 +500,9 @@ run_prove_if_requested() {
   [[ -n "$WORKLOAD_PATH" ]] || return 0
   command -v readlink >/dev/null 2>&1 || die "readlink is required to locate the workload file"
   local workload workload_extension mounted_workload result submission digest prove_status
+  case "/$WORKLOAD_PATH/" in
+    */../*) die "the workload path cannot contain parent-directory traversal" ;;
+  esac
   workload="$(readlink -f -- "$WORKLOAD_PATH")" || die "the workload path could not be resolved"
   [[ -f "$workload" ]] || die "the workload must be a readable JSON or JSONL file"
   [[ "$workload" != *$'\n'* && "$workload" != *$'\r'* && "$workload" != *,* ]] ||
