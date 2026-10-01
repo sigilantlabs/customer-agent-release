@@ -32,6 +32,7 @@ WORKLOAD_PATH=""
 PROVE_CREDENTIAL="${SIGILANT_LAUNCH_CREDENTIAL:-}"
 RUN_PURPOSE="production"
 SAMPLE_CAP=""
+BOUNDED_ACCEPTANCE=0
 RELEASE_TMP_DIR=""
 ENROLLMENT_ENV_FILE=""
 cleanup_installer_temp() {
@@ -92,6 +93,7 @@ Options:
   --workload FILE         install the agent and immediately run Prove on this workload
   --credential VALUE      temporary API credential for Prove (Task 5 will replace this bridge)
   --run-purpose VALUE     Prove execution profile (for bounded acceptance tests)
+  --bounded-acceptance    run the privacy acceptance profile with 40–60 rows
   --sample-cap N          bounded Prove row cap (40 to 60)
   --no-systemd            run with Docker restart policy only
   --dry-run               show checks and actions without changing the host
@@ -122,6 +124,7 @@ while [[ $# -gt 0 ]]; do
     --run-purpose)
       [[ $# -ge 2 && -n "$2" ]] || die "--run-purpose needs a value"
       RUN_PURPOSE="$2"; shift 2 ;;
+    --bounded-acceptance) BOUNDED_ACCEPTANCE=1; shift ;;
     --sample-cap)
       [[ $# -ge 2 && "$2" =~ ^[0-9]+$ ]] || die "--sample-cap needs an integer"
       SAMPLE_CAP="$2"; shift 2 ;;
@@ -139,6 +142,15 @@ if [[ -n "$WORKLOAD_PATH" ]]; then
 elif [[ -n "$PROVE_CREDENTIAL" ]]; then
   die "--workload is required when --credential is supplied"
 fi
+if (( BOUNDED_ACCEPTANCE )); then
+  [[ -n "$WORKLOAD_PATH" ]] || die "--bounded-acceptance requires --workload and --credential"
+  [[ "$RUN_PURPOSE" == production || "$RUN_PURPOSE" == privacy_canary ]] ||
+    die "--bounded-acceptance conflicts with --run-purpose"
+  RUN_PURPOSE=privacy_canary
+  [[ -n "$SAMPLE_CAP" ]] || SAMPLE_CAP=60
+  (( 10#$SAMPLE_CAP >= 40 && 10#$SAMPLE_CAP <= 60 )) ||
+    die "--sample-cap must be from 40 through 60"
+fi
 [[ "$PROVE_CREDENTIAL" != *$'\n'* && "$PROVE_CREDENTIAL" != *$'\r'* ]] || die "the credential contains invalid characters"
 [[ "$CONTROL_URL" =~ ^https://[^/?#[:space:]]+/?$ ]] || die "--control-url must be an HTTPS origin"
 [[ "$RELEASE_URL" =~ ^https://[^/?#[:space:]]+(/[^?#[:space:]]*)?$ ]] || die "the release URL must be HTTPS"
@@ -148,6 +160,7 @@ if (( DRY_RUN )); then
   info "dry run: would inspect the GPU, install Docker/NVIDIA support if needed,"
   info "dry run: would pull a signed customer-agent image, enroll this host,"
   info "dry run: would install a restartable service and start the agent"
+  (( BOUNDED_ACCEPTANCE == 0 )) || info "dry run: bounded acceptance profile with sample cap $SAMPLE_CAP"
   [[ -z "$WORKLOAD_PATH" ]] || info "dry run: would run Prove on the supplied workload using this enrolled host"
   info "dry run: state directory: $STATE_DIR"
   exit 0

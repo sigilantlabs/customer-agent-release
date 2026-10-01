@@ -68,6 +68,16 @@ class ReleaseRepositoryBoundaryTests(unittest.TestCase):
         self.assertIn("trap 'exit 130' INT", source)
         self.assertIn("trap 'exit 143' TERM", source)
 
+    def test_bounded_acceptance_alias_matches_customer_handoff(self) -> None:
+        result = subprocess.run(
+            ["bash", str(INSTALLER), "--enrollment-code", "test-code",
+             "--workload", "/tmp/fixture.jsonl", "--credential", "sig_test",
+             "--bounded-acceptance", "--sample-cap", "40", "--dry-run"],
+            text=True, capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("bounded acceptance profile with sample cap 40", result.stdout)
+
     def test_workflow_has_no_pat_or_registry_secret_dependency(self) -> None:
         source = WORKFLOW.read_text(encoding="utf-8")
         self.assertNotIn("docker/login-action", source)
