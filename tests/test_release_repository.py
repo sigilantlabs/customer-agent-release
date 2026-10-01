@@ -60,6 +60,14 @@ class ReleaseRepositoryBoundaryTests(unittest.TestCase):
         with mock.patch.object(module.subprocess, "run", return_value=complete):
             self.assertTrue(module.verify("sigilantlabs/customer-agent-release", "test", attempts=1))
 
+    def test_enrollment_secret_uses_temporary_env_file_not_docker_argv(self) -> None:
+        source = INSTALLER.read_text(encoding="utf-8")
+        self.assertIn('enrollment_args+=(--env-file "$ENROLLMENT_ENV_FILE")', source)
+        self.assertNotIn('enrollment_args+=(--env "SIGILANT_ENROLLMENT_CODE=$ENROLLMENT_CODE")', source)
+        self.assertIn('trap cleanup_installer_temp EXIT', source)
+        self.assertIn("trap 'exit 130' INT", source)
+        self.assertIn("trap 'exit 143' TERM", source)
+
     def test_workflow_has_no_pat_or_registry_secret_dependency(self) -> None:
         source = WORKFLOW.read_text(encoding="utf-8")
         self.assertNotIn("docker/login-action", source)

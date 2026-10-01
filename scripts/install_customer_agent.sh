@@ -33,7 +33,9 @@ PROVE_CREDENTIAL="${SIGILANT_LAUNCH_CREDENTIAL:-}"
 RUN_PURPOSE="production"
 SAMPLE_CAP=""
 RELEASE_TMP_DIR=""
+ENROLLMENT_ENV_FILE=""
 cleanup_installer_temp() {
+  [[ -z "$ENROLLMENT_ENV_FILE" ]] || rm -f -- "$ENROLLMENT_ENV_FILE"
   [[ -z "$RELEASE_TMP_DIR" ]] || rm -rf -- "$RELEASE_TMP_DIR"
 }
 trap cleanup_installer_temp EXIT
@@ -392,7 +394,10 @@ install_and_start() {
   rm -f -- "$STATE_DIR/agent-ready.json"
   local -a enrollment_args=()
   if [[ ! -s "$STATE_DIR/host-token" && ! -s "$STATE_DIR/host.json" ]]; then
-    enrollment_args+=(--env "SIGILANT_ENROLLMENT_CODE=$ENROLLMENT_CODE")
+    ENROLLMENT_ENV_FILE="$(mktemp "$STATE_DIR/.enrollment-env.XXXXXX")"
+    chmod 600 "$ENROLLMENT_ENV_FILE"
+    printf 'SIGILANT_ENROLLMENT_CODE=%s\n' "$ENROLLMENT_CODE" > "$ENROLLMENT_ENV_FILE"
+    enrollment_args+=(--env-file "$ENROLLMENT_ENV_FILE")
   fi
   docker_cmd run -d --name "$service_name" --restart unless-stopped --init --gpus all \
     --user "$INSTALL_UID:$INSTALL_GID" --cap-drop=ALL --security-opt=no-new-privileges --read-only \
@@ -403,6 +408,10 @@ install_and_start() {
     "${enrollment_args[@]}" \
     --mount "type=bind,src=$STATE_DIR,dst=/state" "$image" >/dev/null ||
     die "the Sigilant agent could not start; no workload data was sent"
+  if [[ -n "$ENROLLMENT_ENV_FILE" ]]; then
+    rm -f -- "$ENROLLMENT_ENV_FILE"
+    ENROLLMENT_ENV_FILE=""
+  fi
   # A running container only proves Docker accepted the process.  Wait for
   # enrollment to persist host identity, then recreate it without the one-time
   # code so it is absent from `docker inspect` and the long-lived environment.
